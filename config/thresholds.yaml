@@ -1,0 +1,49 @@
+# 风险评分阈值配置
+risk_thresholds:
+  high: 85
+  medium: 65
+  low: 45
+  ignore: 0  # 低于此值不进报告
+
+# 综合评分权重
+scoring_weights:
+  vector_similarity: 0.60
+  keyword_overlap: 0.25
+  context_bonus: 0.15
+
+# 上下文加分
+context_bonus:
+  same_section: 0.10
+  tech_spec_type: 0.05
+
+# 白名单惩罚系数
+whitelist_penalty: 0.20
+
+# LLM 评分调整范围
+llm_adjustment_range:
+  min: -20
+  max: 20
+
+# 整体文档风险判定
+overall_risk:
+  high_count_threshold: 3
+  similarity_rate_threshold: 0.30
+  medium_count_threshold: 5
+
+# 向量检索
+retrieval:
+  top_k: 5
+  min_similarity: 0.70
+  whitelist_threshold: 0.88
+
+# 文本切分
+chunking:
+  max_chars: 800
+  min_chars: 50
+  window_size: 600
+  step_size: 300
+
+# LLM Token 控制
+llm_token_control:
+  max_chars_per_chunk: 800
+  max_prompt_tokens: 2000
