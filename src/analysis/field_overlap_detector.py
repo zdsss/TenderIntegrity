@@ -7,12 +7,12 @@ from src.document.field_extractor import KeyFields
 
 logger = logging.getLogger(__name__)
 
-FUZZY_THRESHOLD = 0.85  # 模糊匹配最低相似度
+FUZZY_THRESHOLD = 0.80  # 模糊匹配最低相似度（Q4：从0.85降至0.80，捕获近似电话号码）
 
 
 @dataclass
 class FieldOverlap:
-    field_type: str    # "phone" / "email" / "person" / "company" / "project"
+    field_type: str    # "phone" / "email" / "person" / "company" / "project" / "team_member"
     value_a: str
     value_b: str
     overlap_type: str  # "exact" / "fuzzy"
@@ -36,14 +36,21 @@ class FieldOverlapDetector:
                 ))
         return overlaps
 
-    def _fuzzy_overlap(self, list_a: list[str], list_b: list[str], field_type: str, note_tmpl: str) -> list[FieldOverlap]:
+    def _fuzzy_overlap(
+        self,
+        list_a: list[str],
+        list_b: list[str],
+        field_type: str,
+        note_tmpl: str,
+        threshold: float = FUZZY_THRESHOLD,
+    ) -> list[FieldOverlap]:
         overlaps = []
         for val_a in list_a:
             for val_b in list_b:
                 if val_a == val_b:
                     continue  # 已由精确匹配处理
                 ratio = difflib.SequenceMatcher(None, val_a, val_b).ratio()
-                if ratio >= FUZZY_THRESHOLD:
+                if ratio >= threshold:
                     overlaps.append(FieldOverlap(
                         field_type=field_type,
                         value_a=val_a,
@@ -61,6 +68,11 @@ class FieldOverlapDetector:
         overlaps.extend(self._exact_overlap(
             fields_a.phones, fields_b.phones, "phone",
             "两份文档出现相同联系电话 {val}，疑似同一投标主体"
+        ))
+        # 电话：模糊匹配（捕获仅末几位不同的近似号码）
+        overlaps.extend(self._fuzzy_overlap(
+            fields_a.phones, fields_b.phones, "phone",
+            "两份文档联系电话高度相似 {val}，疑似关联主体"
         ))
 
         # 邮箱：精确匹配（不区分大小写已在提取时统一小写）
@@ -87,6 +99,16 @@ class FieldOverlapDetector:
         overlaps.extend(self._fuzzy_overlap(
             fields_a.company_names, fields_b.company_names, "company",
             "两份文档公司名称高度相似 {val}，疑似关联公司"
+        ))
+
+        # 团队成员：精确 + 模糊（Q4：新增）
+        overlaps.extend(self._exact_overlap(
+            fields_a.team_members, fields_b.team_members, "team_member",
+            "两份文档出现相同团队成员 {val}，疑似人员交叉"
+        ))
+        overlaps.extend(self._fuzzy_overlap(
+            fields_a.team_members, fields_b.team_members, "team_member",
+            "两份文档团队成员高度相似 {val}"
         ))
 
         logger.info(f"字段重叠检测: {len(overlaps)} 项重叠")

@@ -1,6 +1,7 @@
 """generate_report 节点"""
 import logging
 from src.analysis.scorer import RiskScorer
+from src.analysis.risk_synthesizer import RiskSynthesizer
 from src.workflow.state import TenderComparisonState
 
 logger = logging.getLogger(__name__)
@@ -12,11 +13,28 @@ def generate_report(state: TenderComparisonState) -> dict:
     if state["chunks"]:
         first_doc_id = state["doc_ids"][0] if state["doc_ids"] else next(iter(state["chunks"]))
         total_chunks_a = len(state["chunks"].get(first_doc_id, []))
+
+    # 文本维度风险（原始）
     scorer = RiskScorer()
-    overall_risk_level, overall_similarity_rate = scorer.compute_overall_risk(pairs, total_chunks_a)
+    text_risk_level, overall_similarity_rate = scorer.compute_overall_risk(pairs, total_chunks_a)
+
+    # 综合风险合成（Q5：整合多维度信号）
+    synthesizer = RiskSynthesizer()
+    composite = synthesizer.synthesize(
+        text_level=text_risk_level,
+        text_rate=overall_similarity_rate,
+        structure=state.get("structure_similarity"),
+        field_overlaps=state.get("field_overlaps") or [],
+        rare_token=state.get("rare_token_analysis"),
+        price=state.get("price_analysis"),
+        meta=state.get("meta_comparison"),
+    )
+    overall_risk_level = composite.final_level
+
     high_pairs = [p for p in pairs if p.risk_level == "high"]
     medium_pairs = [p for p in pairs if p.risk_level == "medium"]
     low_pairs = [p for p in pairs if p.risk_level == "low"]
+
     risk_pairs_data = []
     for pair in pairs:
         if pair.risk_level == "none":
@@ -51,6 +69,7 @@ def generate_report(state: TenderComparisonState) -> dict:
             "evidence_quote_b": pair.evidence_quote_b,
             "suggest_action": pair.suggest_action,
         })
+
     report = {
         "task_id": state["task_id"],
         "overall_risk_level": overall_risk_level,
@@ -71,8 +90,21 @@ def generate_report(state: TenderComparisonState) -> dict:
         "risk_pairs": risk_pairs_data,
         "structure_analysis": state.get("structure_similarity"),
         "field_overlaps": state.get("field_overlaps") or [],
+        "rare_token_analysis": state.get("rare_token_analysis"),
+        "price_analysis": state.get("price_analysis"),
+        "meta_comparison": state.get("meta_comparison"),
+        "composite_risk": {
+            "final_level": composite.final_level,
+            "text_risk_level": composite.text_risk_level,
+            "triggered_signals": composite.triggered_signals,
+            "signal_breakdown": composite.signal_breakdown,
+        },
     }
-    logger.info(f"报告生成完成: 整体风险={overall_risk_level}, 雷同率={overall_similarity_rate:.1%}")
+
+    logger.info(
+        f"报告生成完成: 文本风险={text_risk_level}, 综合风险={overall_risk_level}, "
+        f"雷同率={overall_similarity_rate:.1%}, 触发信号={len(composite.triggered_signals)}"
+    )
     return {
         "report": report,
         "overall_risk_level": overall_risk_level,

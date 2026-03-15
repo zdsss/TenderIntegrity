@@ -21,7 +21,7 @@ TenderIntegrity 通过「向量语义检索 + 结构分析 + 关键字段比对 
 ┌───────────────────────────────▼──────────────────────────────────┐
 │                  工作流编排层 (LangGraph StateGraph)               │
 │  [解析]→[分块]→[结构/字段分析]→[白名单]→[向量化]→[检索]→           │
-│  [评分]→[LLM判定]→[报告]                                          │
+│  [评分]→[LLM判定]→[综合风险合成]→[报告]                            │
 └──────┬─────────────────────────────────────────────┬─────────────┘
        │                                             │
 ┌──────▼──────────┐                   ┌─────────────▼─────────────┐
@@ -29,9 +29,12 @@ TenderIntegrity 通过「向量语义检索 + 结构分析 + 关键字段比对 
 │  DocumentParser  │                   │  RiskScorer               │
 │  ChunkSplitter   │                   │  StructureComparator      │
 │  MetadataExtract │                   │  FieldOverlapDetector     │
-│  KeyFieldExtract │                   │  LLM RiskReasonChain      │
-│  WhitelistFilter │                   │  KeywordExtractor         │
-└──────┬──────────┘                   └─────────────┬─────────────┘
+│  KeyFieldExtract │                   │  RareTokenAnalyzer  [P3]  │
+│  DocxMetaExtract │                   │  PriceAnalyzer      [P3]  │
+│  WhitelistFilter │                   │  RiskSynthesizer    [P3]  │
+└──────┬──────────┘                   │  LLM RiskReasonChain      │
+       │                              │  KeywordExtractor         │
+       │                              └─────────────┬─────────────┘
        │                                             │
 ┌──────▼─────────────────────────────────────────────▼────────────┐
 │                    基础设施层 (Infrastructure)                     │
@@ -87,13 +90,13 @@ TenderIntegrity/
 │   │   ├── nodes/                  # 工作流节点
 │   │   │   ├── parse_node.py
 │   │   │   ├── chunk_node.py
-│   │   │   ├── structure_node.py   # 结构相似度 + 字段重叠分析
+│   │   │   ├── structure_node.py   # 结构+字段+罕见序列+价格+元数据分析 [P3]
 │   │   │   ├── whitelist_node.py
 │   │   │   ├── embed_node.py
 │   │   │   ├── retrieve_node.py
 │   │   │   ├── score_node.py
 │   │   │   ├── llm_node.py
-│   │   │   └── report_node.py
+│   │   │   └── report_node.py      # 综合风险合成 [P3]
 │   │   └── routers.py
 │   │
 │   ├── document/                   # 文档处理层
@@ -103,23 +106,30 @@ TenderIntegrity/
 │   │   ├── text_parser.py
 │   │   ├── chunker.py
 │   │   ├── metadata_extractor.py
-│   │   └── field_extractor.py      # 关键字段提取（电话/邮箱/联系人/公司）
+│   │   ├── field_extractor.py      # 关键字段提取（电话/邮箱/联系人/公司/团队成员）
+│   │   └── docx_meta.py            # DOCX 元数据提取与对比 [P3]
 │   │
 │   ├── analysis/                   # 智能分析层
 │   │   ├── similarity.py
-│   │   ├── scorer.py               # RiskScorer（综合评分）
+│   │   ├── scorer.py               # RiskScorer（文本综合评分）
 │   │   ├── structure_comparator.py # 章节结构相似度分析
-│   │   ├── field_overlap_detector.py # 关键字段重叠检测
+│   │   ├── field_overlap_detector.py # 关键字段重叠检测（含团队成员）
+│   │   ├── rare_token_analyzer.py  # 罕见汉字4-gram + 量化参数共现 [P3]
+│   │   ├── price_analyzer.py       # 报价接近度检测 [P3]
+│   │   ├── risk_synthesizer.py     # 多维度综合风险合成 [P3]
 │   │   ├── whitelist_filter.py
 │   │   └── keyword_extractor.py
 │   │
 │   └── chains/ / vectorstore/ / report/ / storage/
 │
 ├── frontend/                       # React Web UI
-│   └── src/pages/ReportPage/       # 风险报告展示页
+│   └── src/pages/ReportPage/       # 风险报告展示页（含 RiskSynthesisPanel [P3]）
+│
+├── scripts/
+│   └── validate_corpus.py          # 测试语料覆盖率矩阵验证脚本 [P3]
 │
 └── tests/
-    └── unit/                       # 49 个单元测试
+    └── unit/                       # 82 个单元测试
 ```
 
 ---
@@ -166,7 +176,7 @@ parse_documents ──[解析失败]──→ handle_error ──→ END
 chunk_documents
   │
   ▼
-analyze_structure_and_fields   ← Phase 2 新增：结构相似度 + 字段重叠
+analyze_structure_and_fields   ← Phase 2/3：结构+字段+罕见序列+价格+元数据
   │
   ▼
 filter_whitelist → embed_and_store → retrieve_similar_pairs → score_candidates
@@ -174,6 +184,9 @@ filter_whitelist → embed_and_store → retrieve_similar_pairs → score_candid
   ├─[无候选对]──→ generate_report ──→ END
   │
   └─[有候选对]──→ llm_analyze_pairs ──→ generate_report ──→ END
+                                              │
+                                       RiskSynthesizer（Phase 3）
+                                       整合所有信号 → 综合风险等级
 ```
 
 ### 工作流节点说明
@@ -182,13 +195,13 @@ filter_whitelist → embed_and_store → retrieve_similar_pairs → score_candid
 |---|---|
 | `parse_documents` | 调用 DocumentParser 提取原始文本 |
 | `chunk_documents` | 自然段落切分 + 章节识别 + 类型分类 |
-| `analyze_structure_and_fields` | 章节结构相似度（Jaccard + 编辑距离）+ 关键字段重叠检测 |
+| `analyze_structure_and_fields` | 章节结构相似度 + 字段重叠 + 罕见序列 + 价格 + DOCX元数据 |
 | `filter_whitelist` | 正则 + 向量两层白名单标记 |
 | `embed_and_store` | BGE-M3 批量向量化，写入 ChromaDB |
 | `retrieve_similar_pairs` | 跨文档向量检索，生成候选相似对 |
 | `score_candidates` | 综合评分 + 过滤低风险对 |
 | `llm_analyze_pairs` | 调用 Claude，生成中文判定理由（分析所有 ≥45 分对，上限 20 对） |
-| `generate_report` | 汇总生成结构化风险报告（含结构分析和字段重叠） |
+| `generate_report` | 调用 RiskSynthesizer 合成最终风险等级，汇总结构化风险报告 |
 | `handle_error` | 捕获异常，记录错误 |
 
 ---
@@ -216,9 +229,13 @@ LLM 调整 ±20 分
 | 45 ~ 64 | 🟢 低风险 (low) |
 | 0 ~ 44 | ⚪ 无明显风险（不进报告） |
 
-### 整体文档风险判定（Phase 2 修复：比例判定）
+### 整体文档风险判定（Phase 3：综合多维度信号）
 
-| 条件 | 判定 |
+Phase 3 引入 `RiskSynthesizer`，将文本维度分数与非文本信号整合，任一强信号可直接触发风险升级：
+
+**文本基础维度（Phase 2）**
+
+| 条件 | 文本风险 |
 |---|---|
 | `similarity_rate ≥ 0.30` 或 `高风险对/总对数 ≥ 0.05` | 高风险 |
 | `similarity_rate ≥ 0.15` 或 `(高风险对 ≥ 1 且 中风险对 ≥ 3)` | 中风险 |
@@ -226,31 +243,91 @@ LLM 调整 ±20 分
 
 > `similarity_rate` = 被任意风险对（high/medium/low）覆盖的不重复 chunk 数 / 文档 A 总 chunk 数
 
+**非文本信号升级规则（Phase 3）**
+
+| 触发条件 | 最终判定 |
+|---|---|
+| 电话或邮箱精确重叠 | → **HIGH**（无论文本分） |
+| 团队成员姓名精确重叠 ≥ 1 人 | → **HIGH** |
+| 罕见汉字序列 / 量化参数共现 ≥ 2 项 | → **HIGH** |
+| 报价接近度 ≤ 1%（疑似协同定价） | → **HIGH** |
+| DOCX 文件作者或公司属性完全相同 | → **HIGH** |
+| 结构分 ≥ 70 且文本雷同率 ≥ 30% | → **HIGH** |
+| 结构分 ≥ 50 且字段模糊重叠 ≥ 1 项 | → **MEDIUM↑** |
+| 文件修改时间差 ≤ 30 分钟且文本率 ≥ 15% | → **MEDIUM↑** |
+| 报价接近度 ≤ 5% | → **MEDIUM↑** |
+
 ---
 
-## 系统能力边界
+## 系统能力边界与检测矩阵
 
-当前系统（Phase 2）可检测以下围标场景：
+### 当前覆盖信号（Phase 3）
 
-| 场景 | 检测维度 | 可信度 |
+| 围标信号类型 | 检测维度 | Phase | 可信度 |
+|---|---|---|---|
+| 文字逐字复制 | 向量相似度 + 关键词重叠 | P1 | 高 |
+| 语义改写（同义替换） | LLM 分析（≥45 分对，Chain-of-Thought） | P2 | 中~高 |
+| 章节结构版式同源 | StructureComparator（Jaccard + 序列相似） | P2 | 中 |
+| 联系电话 / 邮箱精确重叠 | FieldOverlapDetector 精确匹配 | P2 | 高 |
+| 联系电话近似重叠（末位变换） | FieldOverlapDetector 模糊匹配（阈值 0.80） | P3 | 中 |
+| 联系人 / 公司名重叠 | FieldOverlapDetector 精确 + 模糊 | P2 | 高 / 中 |
+| 团队核心成员姓名重叠 | FieldOverlapDetector + 角色正则提取 | P3 | 高 |
+| 表格参数完全一致 | 向量相似度（table_row chunk） | P1 | 高 |
+| 罕见错别字 / 低频表述共现 | RareTokenAnalyzer 4-gram 罕见序列 | P3 | 高 |
+| 量化参数精确复用（响应时限等） | RareTokenAnalyzer 数字+单位模式 | P3 | 高 |
+| 报价协同定价（接近度分析） | PriceAnalyzer（≤1%→高，≤5%→中） | P3 | 高 |
+| DOCX 文件作者 / 公司元数据相同 | DocxMetaExtract（core_properties） | P3 | 高 |
+| 文件时间戳聚集（≤30分钟内完成） | DocxMetaExtract 修改时间差 | P3 | 中 |
+
+### 检测盲区（当前局限）
+
+| 盲区 | 说明 | 后续方向 |
 |---|---|---|
-| 文字逐字复制 | 向量相似度 + 关键词重叠 | 高 |
-| 语义改写（同义替换） | LLM 分析（已覆盖 ≥45 分对） | 中~高 |
-| 章节结构一致（版式同源） | StructureComparator | 中 |
-| 联系方式/人员重叠 | FieldOverlapDetector | 高（精确匹配）/ 中（模糊） |
-| 表格参数完全一致 | 向量相似度（table_row chunk） | 高 |
+| 价格梯度协同 | 仅检测两文档总价接近度，不分析多文档等差/等比分布 | 多文档矩阵模式扩展 |
+| 联系人 NER | 依赖角色关键词上下文提取，无实体识别 | 接入 NER 模型 |
+| 跨项目历史查重 | 当前仅比对本次上传文档 | 历史文档向量库 |
+| all_vs_all 并行 | 多文档矩阵模式无并发优化 | LangGraph Send API |
+| 图片/扫描件 | 不解析图片内嵌文字 | OCR 接入 |
 
 ---
 
-## 已知局限
+## 报告输出字段（Phase 3）
 
-| 编号 | 问题描述 | Phase 3 规划 |
-|---|---|---|
-| P5 残留 | 结构相似度仅比较标题列表，未分析章节长度比例 | 加入段落密度分析 |
-| P6 残留 | 联系人提取依赖关键词上下文，无实体识别 | 接入 NER 模型 |
-| 价格梯度 | 未检测投标价格分布异常（等差/等比梯度） | Phase 3 新增 |
-| 时间戳聚集 | 未检测文件修改时间异常接近 | Phase 3 新增 |
-| 多文档矩阵 | all_vs_all 模式下无并行优化 | LangGraph Send API |
+Phase 3 报告在 Phase 2 基础上新增以下顶层字段：
+
+```json
+{
+  "composite_risk": {
+    "final_level": "high",
+    "text_risk_level": "low",
+    "triggered_signals": [
+      "电话/邮箱精确重叠: phone = \"13812345678\"",
+      "罕见序列匹配 3 项（含低频汉字4-gram和量化参数复用）"
+    ],
+    "signal_breakdown": { "text": "low", "field_overlaps": {...}, "rare_token": {...} }
+  },
+  "rare_token_analysis": {
+    "risk_level": "high",
+    "total_match_count": 3,
+    "number_unit_matches": ["24小时响应", "600家供应商"],
+    "matches": [{ "token": "核心处理能力", "token_type": "4gram", ... }]
+  },
+  "price_analysis": {
+    "risk_level": "high",
+    "total_a": 1000000,
+    "total_b": 1005000,
+    "proximity_ratio": 0.005,
+    "is_price_coordinated": true
+  },
+  "meta_comparison": {
+    "risk_level": "medium",
+    "same_author": false,
+    "is_timestamp_clustered": true,
+    "time_gap_minutes": 12.5,
+    "risk_notes": ["两份文档修改时间相差 12.5 分钟（≤30分钟），疑似同批次制作"]
+  }
+}
+```
 
 ---
 
@@ -282,11 +359,14 @@ LLM 调整 ±20 分
 ## 测试
 
 ```bash
-# 后端单元测试（49 个）
+# 后端单元测试（82 个）
 uv run pytest tests/unit/ -v
 
 # 前端测试（48 个）
 cd frontend && npm test
+
+# 测试语料覆盖率矩阵（需提供语料，见 tests/corpus/README）
+uv run python scripts/validate_corpus.py --corpus-dir tests/corpus/
 ```
 
 ---
@@ -297,14 +377,21 @@ cd frontend && npm test
 {
   "task_id": "abc123",
   "overall_risk_level": "high",
-  "overall_similarity_rate": 0.34,
-  "risk_summary": { "high_count": 5, "medium_count": 12, "low_count": 8 },
+  "overall_similarity_rate": 0.18,
+  "risk_summary": { "high_count": 2, "medium_count": 5, "low_count": 3 },
+  "composite_risk": {
+    "final_level": "high",
+    "text_risk_level": "medium",
+    "triggered_signals": [
+      "电话/邮箱精确重叠: phone = \"13812345678\"",
+      "结构分 72.0/100 (≥70) + 文本雷同率 32.0% (≥30%)"
+    ]
+  },
   "structure_analysis": {
     "title_jaccard": 0.875,
     "sequence_similarity": 0.92,
-    "overall_score": 89.75,
-    "structure_risk_level": "high",
-    "matched_sections": [["第一章 总则", "第一章 总则"], ["第二章 技术要求", "第二章 技术要求"]]
+    "overall_score": 72.0,
+    "structure_risk_level": "high"
   },
   "field_overlaps": [
     {
@@ -315,6 +402,19 @@ cd frontend && npm test
       "risk_note": "两份文档出现相同联系电话 13812345678，疑似同一投标主体"
     }
   ],
+  "rare_token_analysis": {
+    "risk_level": "medium",
+    "total_match_count": 1,
+    "number_unit_matches": ["24小时响应"]
+  },
+  "price_analysis": {
+    "risk_level": "none",
+    "proximity_ratio": null
+  },
+  "meta_comparison": {
+    "risk_level": "none",
+    "is_timestamp_clustered": false
+  },
   "risk_pairs": [
     {
       "pair_id": "...",
@@ -353,12 +453,18 @@ cd frontend && npm test
 - [x] **P6**: 新增关键字段提取与重叠检测（联系电话/邮箱/联系人/公司名）
 - [x] 前端报告页展示结构相似度 + 字段重叠 Alert
 
-### Phase 3 — 围标深度信号（规划中）
-- [ ] 价格梯度异常检测（等差/等比价格分布）
-- [ ] 文件时间戳聚集分析（修改时间异常接近）
-- [ ] 商务条款高度一致性检测
-- [ ] 多文档矩阵比对（LangGraph Send API 并行）
-- [ ] 历史文档跨项目查重
+### Phase 3 — 围标深度信号 ✅
+- [x] **Q1**: 罕见汉字序列共现检测（4-gram 低频共现 + 量化参数精确复用）
+- [x] **Q2**: 价格异常分析（总报价接近度，≤1%→高风险，≤5%→中风险）
+- [x] **Q3**: DOCX 文件元数据对比（作者、公司、修改时间戳聚集）
+- [x] **Q4**: 扩展团队成员提取（架构师、实施顾问、测试工程师等 6 类角色）+ 电话模糊阈值 0.85→0.80
+- [x] **Q5**: 综合风险合成器（RiskSynthesizer）—— 修复"非文本信号不参与最终判定"架构缺陷
+- [x] **Q6**: LLM Prompt 新增 `error_replication`（错误复现）和 `key_number_duplicate` 风险类型
+
+### Phase 4 — 规划中
+- [ ] 多文档价格梯度分析（等差/等比分布检测）
+- [ ] all_vs_all 并发优化（LangGraph Send API）
+- [ ] 历史文档跨项目查重（持久化向量库）
 - [ ] NER 实体识别增强联系人提取
 
 ---
@@ -376,3 +482,9 @@ cd frontend && npm test
 
 **为什么加结构分析和字段提取？**
 向量相似度只能发现文字层面的雷同，但围标文件通常呈现版式同源（章节结构一致）和主体关联（电话/联系人重叠）等特征，这些信号与文字内容无关，必须单独提取。
+
+**为什么需要综合风险合成器（Phase 3）？**
+Phase 2 的 `overall_risk_level` 完全由文本分数决定，`structure_analysis` 和 `field_overlaps` 是纯装饰字段，不影响最终判定。当一对文档存在电话精确重叠（高风险）但文本经过语义改写（分数偏低）时，系统会错误输出 `low` 风险。`RiskSynthesizer` 解决了这个根本性问题——任何强信号（精确字段重叠、罕见序列共现、价格接近、元数据同源）都可以独立触发风险升级，不再依赖文本分数的"一票否决"。
+
+**为什么检测罕见4-gram而非直接比较全文？**
+全文 n-gram 覆盖大量模板词汇（法规引用、行业通用表述），信噪比极低。只有在单份文档内出现≤2次的罕见字符序列，才能区分"作者原创写法"与"模板内容"。两份文档出现相同罕见写法（尤其是相同错别字），在统计上几乎不可能是巧合，是最强的围标证据之一。

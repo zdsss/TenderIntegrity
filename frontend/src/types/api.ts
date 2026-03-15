@@ -74,11 +74,52 @@ export interface StructureAnalysis {
 }
 
 export interface FieldOverlap {
-  field_type: 'phone' | 'email' | 'person' | 'company' | 'project'
+  field_type: 'phone' | 'email' | 'person' | 'company' | 'project' | 'team_member'
   value_a: string
   value_b: string
   overlap_type: 'exact' | 'fuzzy'
   risk_note: string
+}
+
+export interface RareTokenMatch {
+  token: string
+  freq_in_a: number
+  freq_in_b: number
+  token_type: '4gram' | 'number_unit'
+  risk_note: string
+}
+
+export interface RareTokenAnalysis {
+  matches: RareTokenMatch[]
+  risk_level: RiskLevel | 'none'
+  total_match_count: number
+  number_unit_matches: string[]
+}
+
+export interface PriceAnalysis {
+  risk_level: RiskLevel | 'none'
+  total_a: number | null
+  total_b: number | null
+  proximity_ratio: number | null
+  is_price_coordinated: boolean
+  coordinated_evidence: string[]
+}
+
+export interface MetaComparison {
+  risk_level: RiskLevel | 'none'
+  same_author: boolean
+  same_last_modifier: boolean
+  same_company: boolean
+  time_gap_minutes: number | null
+  is_timestamp_clustered: boolean
+  risk_notes: string[]
+}
+
+export interface CompositeRisk {
+  final_level: RiskLevel
+  text_risk_level: RiskLevel
+  triggered_signals: string[]
+  signal_breakdown: Record<string, unknown>
 }
 
 export interface RiskReportResponse {
@@ -89,4 +130,8 @@ export interface RiskReportResponse {
   risk_pairs: RiskPairDetail[]
   structure_analysis?: StructureAnalysis | null
   field_overlaps?: FieldOverlap[]
+  rare_token_analysis?: RareTokenAnalysis | null
+  price_analysis?: PriceAnalysis | null
+  meta_comparison?: MetaComparison | null
+  composite_risk?: CompositeRisk | null
 }

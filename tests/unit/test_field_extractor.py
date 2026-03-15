@@ -83,8 +83,9 @@ def test_fuzzy_company_overlap(detector):
 
 
 def test_no_overlap(detector):
-    fields_a = KeyFields(phones=["13800000001"], emails=["a@a.com"])
-    fields_b = KeyFields(phones=["13900000002"], emails=["b@b.com"])
+    # Phones with very different digit patterns to avoid fuzzy match at 0.80 threshold
+    fields_a = KeyFields(phones=["13812345678"], emails=["a@a.com"])
+    fields_b = KeyFields(phones=["15598765432"], emails=["b@b.com"])
     overlaps = detector.detect(fields_a, fields_b)
     assert len(overlaps) == 0
 

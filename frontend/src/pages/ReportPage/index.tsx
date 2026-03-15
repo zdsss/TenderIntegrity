@@ -6,6 +6,7 @@ import type { RiskReportResponse } from '../../types/api'
 import ReportHeader from './ReportHeader'
 import RiskPairsTable from './RiskPairsTable'
 import FieldOverlapAlert from './FieldOverlapAlert'
+import RiskSynthesisPanel from './RiskSynthesisPanel'
 
 export default function ReportPage() {
   const { taskId } = useParams<{ taskId: string }>()
@@ -43,6 +44,12 @@ export default function ReportPage() {
   return (
     <div>
       <ReportHeader report={report} />
+      <RiskSynthesisPanel
+        compositeRisk={report.composite_risk}
+        rareTokenAnalysis={report.rare_token_analysis}
+        priceAnalysis={report.price_analysis}
+        metaComparison={report.meta_comparison}
+      />
       <FieldOverlapAlert overlaps={report.field_overlaps ?? []} />
       <Card title={`风险对列表（共 ${report.risk_pairs.length} 对）`}>
         <RiskPairsTable pairs={report.risk_pairs} />

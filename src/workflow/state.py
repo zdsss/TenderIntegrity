@@ -25,3 +25,6 @@ class TenderComparisonState(TypedDict):
     overall_similarity_rate: float
     structure_similarity: dict | None
     field_overlaps: list[dict]
+    rare_token_analysis: dict | None
+    price_analysis: dict | None
+    meta_comparison: dict | None

@@ -10,8 +10,10 @@ interface Props {
 }
 
 export default function ReportHeader({ report }: Props) {
-  const { overall_risk_level, overall_similarity_rate, risk_summary, task_id, structure_analysis } = report
+  const { overall_risk_level, overall_similarity_rate, risk_summary, task_id, structure_analysis, composite_risk } =
+    report
   const summaryMap = risk_summary ?? {}
+  const signalCount = composite_risk?.triggered_signals?.length ?? 0
 
   return (
     <Card style={{ marginBottom: 24 }}>
@@ -63,6 +65,15 @@ export default function ReportHeader({ report }: Props) {
                         : undefined,
                 },
               }}
+            />
+          </Col>
+        )}
+        {signalCount > 0 && (
+          <Col>
+            <Statistic
+              title="风险信号数"
+              value={signalCount}
+              styles={{ content: { color: '#ff4d4f' } }}
             />
           </Col>
         )}
