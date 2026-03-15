@@ -43,7 +43,7 @@ class RiskScorer:
             keyword_overlap × 0.25 +
             context_bonus × 0.15
         ) × 100
-        白名单惩罚: × 0.20
+        白名单惩罚: × 0.50
         最终分 = base_risk_score + llm_adjustment
     """
 
@@ -54,7 +54,7 @@ class RiskScorer:
     }
     CONTEXT_BONUS_SAME_SECTION = 0.10
     CONTEXT_BONUS_TECH_SPEC = 0.05
-    WHITELIST_PENALTY = 0.20
+    WHITELIST_PENALTY = 0.50
 
     THRESHOLDS = {
         "high": 85.0,
@@ -127,17 +127,20 @@ class RiskScorer:
         """
         high_pairs = [p for p in scored_pairs if p.risk_level == "high"]
         medium_pairs = [p for p in scored_pairs if p.risk_level == "medium"]
+        low_pairs = [p for p in scored_pairs if p.risk_level == "low"]
 
-        # 计算高风险对覆盖的不重叠段落数
+        # 计算所有风险对（high/medium/low）覆盖的不重叠段落数
         covered_chunks: set[str] = set()
-        for p in high_pairs:
+        for p in high_pairs + medium_pairs + low_pairs:
             covered_chunks.add(p.chunk_a.chunk_id)
 
         similarity_rate = len(covered_chunks) / total_chunks_a if total_chunks_a > 0 else 0.0
+        total_scored = len(scored_pairs)
+        high_ratio = len(high_pairs) / total_scored if total_scored > 0 else 0.0
 
-        if len(high_pairs) >= 3 or similarity_rate >= 0.30:
+        if similarity_rate >= 0.30 or high_ratio >= 0.05:
             level = "high"
-        elif len(high_pairs) >= 1 or len(medium_pairs) >= 5:
+        elif similarity_rate >= 0.15 or (len(high_pairs) >= 1 and len(medium_pairs) >= 3):
             level = "medium"
         else:
             level = "low"

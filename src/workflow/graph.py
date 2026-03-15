@@ -12,6 +12,7 @@ from src.workflow.nodes.parse_node import parse_documents
 from src.workflow.nodes.report_node import generate_report
 from src.workflow.nodes.retrieve_node import retrieve_similar_pairs
 from src.workflow.nodes.score_node import score_candidates
+from src.workflow.nodes.structure_node import analyze_structure_and_fields
 from src.workflow.nodes.whitelist_node import filter_whitelist
 from src.workflow.routers import route_after_score
 from src.workflow.state import TenderComparisonState
@@ -42,6 +43,7 @@ def build_graph() -> StateGraph:
     graph = StateGraph(TenderComparisonState)
     graph.add_node("parse_documents", _wrap_node(parse_documents, "parse_documents"))
     graph.add_node("chunk_documents", _wrap_node(chunk_documents, "chunk_documents"))
+    graph.add_node("analyze_structure_and_fields", _wrap_node(analyze_structure_and_fields, "analyze_structure_and_fields"))
     graph.add_node("filter_whitelist", _wrap_node(filter_whitelist, "filter_whitelist"))
     graph.add_node("embed_and_store", _wrap_node(embed_and_store, "embed_and_store"))
     graph.add_node("retrieve_similar_pairs", _wrap_node(retrieve_similar_pairs, "retrieve_similar_pairs"))
@@ -55,7 +57,8 @@ def build_graph() -> StateGraph:
         lambda s: "handle_error" if s.get("error_message") else "chunk_documents",
         {"chunk_documents": "chunk_documents", "handle_error": "handle_error"},
     )
-    graph.add_edge("chunk_documents", "filter_whitelist")
+    graph.add_edge("chunk_documents", "analyze_structure_and_fields")
+    graph.add_edge("analyze_structure_and_fields", "filter_whitelist")
     graph.add_edge("filter_whitelist", "embed_and_store")
     graph.add_edge("embed_and_store", "retrieve_similar_pairs")
     graph.add_edge("retrieve_similar_pairs", "score_candidates")

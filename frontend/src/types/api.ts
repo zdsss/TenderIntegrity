@@ -58,11 +58,27 @@ export interface RiskPairDetail {
 }
 
 export interface RiskSummary {
-  high?: number
-  medium?: number
-  low?: number
-  none?: number
+  high_count?: number
+  medium_count?: number
+  low_count?: number
+  total_count?: number
   [key: string]: number | undefined
+}
+
+export interface StructureAnalysis {
+  title_jaccard: number
+  sequence_similarity: number
+  matched_sections: [string, string][]
+  structure_risk_level: RiskLevel | 'none'
+  overall_score: number
+}
+
+export interface FieldOverlap {
+  field_type: 'phone' | 'email' | 'person' | 'company' | 'project'
+  value_a: string
+  value_b: string
+  overlap_type: 'exact' | 'fuzzy'
+  risk_note: string
 }
 
 export interface RiskReportResponse {
@@ -71,4 +87,6 @@ export interface RiskReportResponse {
   overall_similarity_rate: number
   risk_summary: RiskSummary
   risk_pairs: RiskPairDetail[]
+  structure_analysis?: StructureAnalysis | null
+  field_overlaps?: FieldOverlap[]
 }

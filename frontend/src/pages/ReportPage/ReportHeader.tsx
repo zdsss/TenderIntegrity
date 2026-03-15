@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function ReportHeader({ report }: Props) {
-  const { overall_risk_level, overall_similarity_rate, risk_summary, task_id } = report
+  const { overall_risk_level, overall_similarity_rate, risk_summary, task_id, structure_analysis } = report
   const summaryMap = risk_summary ?? {}
 
   return (
@@ -39,14 +39,33 @@ export default function ReportHeader({ report }: Props) {
           />
         </Col>
         <Col>
-          <Statistic title="高风险对" value={summaryMap.high ?? 0} styles={{ content: { color: '#ff4d4f' } }} />
+          <Statistic title="高风险对" value={summaryMap.high_count ?? 0} styles={{ content: { color: '#ff4d4f' } }} />
         </Col>
         <Col>
-          <Statistic title="中风险对" value={summaryMap.medium ?? 0} styles={{ content: { color: '#fa8c16' } }} />
+          <Statistic title="中风险对" value={summaryMap.medium_count ?? 0} styles={{ content: { color: '#fa8c16' } }} />
         </Col>
         <Col>
-          <Statistic title="低风险对" value={summaryMap.low ?? 0} styles={{ content: { color: '#1677ff' } }} />
+          <Statistic title="低风险对" value={summaryMap.low_count ?? 0} styles={{ content: { color: '#1677ff' } }} />
         </Col>
+        {structure_analysis != null && (
+          <Col>
+            <Statistic
+              title="结构相似度"
+              value={structure_analysis.overall_score.toFixed(1)}
+              suffix="/100"
+              styles={{
+                content: {
+                  color:
+                    structure_analysis.structure_risk_level === 'high'
+                      ? '#ff4d4f'
+                      : structure_analysis.structure_risk_level === 'medium'
+                        ? '#fa8c16'
+                        : undefined,
+                },
+              }}
+            />
+          </Col>
+        )}
       </Row>
     </Card>
   )

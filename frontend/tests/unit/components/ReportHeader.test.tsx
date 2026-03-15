@@ -10,7 +10,7 @@ const MOCK_REPORT: RiskReportResponse = {
   task_id: 'task-abc',
   overall_risk_level: 'high',
   overall_similarity_rate: 0.72,
-  risk_summary: { high: 3, medium: 1, low: 2 },
+  risk_summary: { high_count: 3, medium_count: 1, low_count: 2 },
   risk_pairs: [],
 }
 

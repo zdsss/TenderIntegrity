@@ -17,18 +17,18 @@ context_bonus:
   tech_spec_type: 0.05
 
 # 白名单惩罚系数
-whitelist_penalty: 0.20
+whitelist_penalty: 0.50
 
 # LLM 评分调整范围
 llm_adjustment_range:
   min: -20
   max: 20
 
-# 整体文档风险判定
+# 整体文档风险判定（基于覆盖比例的双维度判定）
 overall_risk:
-  high_count_threshold: 3
-  similarity_rate_threshold: 0.30
-  medium_count_threshold: 5
+  similarity_high_threshold: 0.30
+  similarity_medium_threshold: 0.15
+  high_ratio_threshold: 0.05  # 高风险对占总对数比例阈值
 
 # 向量检索
 retrieval:

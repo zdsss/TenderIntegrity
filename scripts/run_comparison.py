@@ -119,6 +119,8 @@ def main():
         "report": None,
         "overall_risk_level": "low",
         "overall_similarity_rate": 0.0,
+        "structure_similarity": None,
+        "field_overlaps": [],
     }
 
     if args.skip_llm:
@@ -127,6 +129,7 @@ def main():
         from src.workflow.nodes.report_node import generate_report
         from src.workflow.nodes.parse_node import parse_documents
         from src.workflow.nodes.chunk_node import chunk_documents
+        from src.workflow.nodes.structure_node import analyze_structure_and_fields
         from src.workflow.nodes.whitelist_node import filter_whitelist
         from src.workflow.nodes.embed_node import embed_and_store
         from src.workflow.nodes.retrieve_node import retrieve_similar_pairs
@@ -136,6 +139,7 @@ def main():
         graph = StateGraph(TenderComparisonState)
         graph.add_node("parse_documents", parse_documents)
         graph.add_node("chunk_documents", chunk_documents)
+        graph.add_node("analyze_structure_and_fields", analyze_structure_and_fields)
         graph.add_node("filter_whitelist", filter_whitelist)
         graph.add_node("embed_and_store", embed_and_store)
         graph.add_node("retrieve_similar_pairs", retrieve_similar_pairs)
@@ -147,7 +151,8 @@ def main():
             "parse_documents",
             lambda s: "handle_error" if s.get("error_message") else "chunk_documents",
         )
-        graph.add_edge("chunk_documents", "filter_whitelist")
+        graph.add_edge("chunk_documents", "analyze_structure_and_fields")
+        graph.add_edge("analyze_structure_and_fields", "filter_whitelist")
         graph.add_edge("filter_whitelist", "embed_and_store")
         graph.add_edge("embed_and_store", "retrieve_similar_pairs")
         graph.add_edge("retrieve_similar_pairs", "score_candidates")

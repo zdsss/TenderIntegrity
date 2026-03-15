@@ -5,6 +5,7 @@ import { getReport } from '../../api/reports'
 import type { RiskReportResponse } from '../../types/api'
 import ReportHeader from './ReportHeader'
 import RiskPairsTable from './RiskPairsTable'
+import FieldOverlapAlert from './FieldOverlapAlert'
 
 export default function ReportPage() {
   const { taskId } = useParams<{ taskId: string }>()
@@ -42,6 +43,7 @@ export default function ReportPage() {
   return (
     <div>
       <ReportHeader report={report} />
+      <FieldOverlapAlert overlaps={report.field_overlaps ?? []} />
       <Card title={`风险对列表（共 ${report.risk_pairs.length} 对）`}>
         <RiskPairsTable pairs={report.risk_pairs} />
       </Card>

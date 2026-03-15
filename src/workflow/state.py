@@ -23,3 +23,5 @@ class TenderComparisonState(TypedDict):
     report: dict | None
     overall_risk_level: str
     overall_similarity_rate: float
+    structure_similarity: dict | None
+    field_overlaps: list[dict]

@@ -9,9 +9,12 @@ logger = logging.getLogger(__name__)
 
 def llm_analyze_pairs(state: TenderComparisonState) -> dict:
     scored_pairs = state["scored_pairs"]
-    to_analyze = [p for p in scored_pairs if p.base_risk_score >= settings.medium_risk_threshold]
-    no_analyze = [p for p in scored_pairs if p.base_risk_score < settings.medium_risk_threshold]
-    logger.info(f"LLM 分析: {len(to_analyze)} 个高/中风险对")
+    to_analyze = [p for p in scored_pairs if p.base_risk_score >= settings.low_risk_threshold]
+    no_analyze = [p for p in scored_pairs if p.base_risk_score < settings.low_risk_threshold]
+    # 按分数排序后截取 batch_size 上限，控制 LLM 调用成本
+    to_analyze.sort(key=lambda p: p.base_risk_score, reverse=True)
+    to_analyze = to_analyze[:settings.llm_batch_size]
+    logger.info(f"LLM 分析: {len(to_analyze)} 对（低风险阈值 {settings.low_risk_threshold}，上限 {settings.llm_batch_size}）")
     chain = RiskReasonChain(
         model=settings.llm_model,
         temperature=settings.llm_temperature,

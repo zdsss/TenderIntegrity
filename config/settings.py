@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     llm_provider: str = "anthropic"   # "anthropic" | "dashscope"
     llm_temperature: float = 0.1
     llm_max_tokens: int = 1024
+    llm_batch_size: int = 20  # 每任务最多分析的 pairs 数量上限
 
     # Chunking
     chunk_max_chars: int = 800

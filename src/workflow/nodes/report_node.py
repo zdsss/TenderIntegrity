@@ -69,6 +69,8 @@ def generate_report(state: TenderComparisonState) -> dict:
             for doc_id, chunks in state["chunks"].items()
         },
         "risk_pairs": risk_pairs_data,
+        "structure_analysis": state.get("structure_similarity"),
+        "field_overlaps": state.get("field_overlaps") or [],
     }
     logger.info(f"报告生成完成: 整体风险={overall_risk_level}, 雷同率={overall_similarity_rate:.1%}")
     return {
