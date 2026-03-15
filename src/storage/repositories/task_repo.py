@@ -22,6 +22,11 @@ class TaskRepository:
         result = await self.session.execute(select(Task).where(Task.id == task_id))
         return result.scalar_one_or_none()
 
+    async def update_progress(self, task_id: str, progress: float) -> None:
+        task = await self.get(task_id)
+        if task:
+            task.progress = progress
+
     async def update_status(self, task_id: str, status: str, progress: float = 0.0) -> None:
         task = await self.get(task_id)
         if task:

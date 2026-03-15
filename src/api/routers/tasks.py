@@ -107,6 +107,9 @@ async def create_task(
     task_id = str(uuid.uuid4())
     task_repo = TaskRepository(session)
     task = await task_repo.create(task_id, request.comparison_mode)
+    # 显式提交，确保 201 响应到达客户端前 DB 已可见，避免首次 poll 404 竞态条件
+    await session.commit()
+    await session.refresh(task)
 
     background_tasks.add_task(
         _run_workflow, task_id, request.doc_ids, request.comparison_mode

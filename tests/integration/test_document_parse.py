@@ -13,7 +13,7 @@ def test_docx_parse(sample_docx_a, parser):
     chunks = parser.parse_to_chunks(sample_docx_a, "doc_a")
     assert len(chunks) > 0
     for chunk in chunks:
-        assert len(chunk.text) >= 50
+        assert len(chunk.text) >= 10
         assert chunk.doc_id == "doc_a"
         assert chunk.chunk_id
 
@@ -25,7 +25,7 @@ def test_docx_text_parse(sample_docx_a, parser):
 
 def test_chunk_metadata(sample_docx_a, parser):
     chunks = parser.parse_to_chunks(sample_docx_a, "doc_a")
-    assert all(c.chunk_type in {"legal_ref", "standard_ref", "price_param", "tech_spec", "normal"} for c in chunks)
+    assert all(c.chunk_type in {"legal_ref", "standard_ref", "price_param", "tech_spec", "normal", "table_row", "table_header"} for c in chunks)
     assert all(c.chunk_index >= 0 for c in chunks)
 
 

@@ -4,7 +4,7 @@ install:
 	uv sync
 
 run:
-	uv run uvicorn src.api.main:app --reload --port 8000
+	DYLD_LIBRARY_PATH=/opt/homebrew/lib uv run uvicorn src.api.main:app --reload --port 8000
 
 test:
 	uv run pytest tests/ -v

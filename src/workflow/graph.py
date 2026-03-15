@@ -1,6 +1,9 @@
 """LangGraph StateGraph 定义"""
+import asyncio
 import logging
 from langgraph.graph import END, START, StateGraph
+from src.storage.database import get_db_session
+from src.storage.repositories.task_repo import TaskRepository
 from src.workflow.nodes.chunk_node import chunk_documents
 from src.workflow.nodes.embed_node import embed_and_store
 from src.workflow.nodes.error_node import handle_error
@@ -19,7 +22,15 @@ logger = logging.getLogger(__name__)
 def _wrap_node(fn, node_name: str):
     def wrapped(state: TenderComparisonState) -> dict:
         try:
-            return fn(state)
+            result = fn(state)
+            progress = result.get("processing_progress")
+            task_id = state.get("task_id")
+            if progress is not None and task_id:
+                async def _persist():
+                    async with get_db_session() as session:
+                        await TaskRepository(session).update_progress(task_id, progress)
+                asyncio.run(_persist())
+            return result
         except Exception as e:
             logger.error(f"节点 {node_name} 执行失败: {e}", exc_info=True)
             return {"error_message": str(e), "current_node": node_name}

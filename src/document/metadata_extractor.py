@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Literal
 
-ChunkType = Literal["legal_ref", "standard_ref", "price_param", "tech_spec", "normal"]
+ChunkType = Literal["legal_ref", "standard_ref", "price_param", "tech_spec", "table_row", "table_header", "normal"]
 
 # 章节标题正则（多种中文标书格式）
 SECTION_PATTERNS = [
@@ -59,6 +59,7 @@ class ParagraphChunk:
     section_title: str = ""
     chunk_type: ChunkType = "normal"
     is_whitelisted: bool = False
+    is_heading: bool = False
     chunk_index: int = 0
     char_count: int = 0
     metadata: dict = field(default_factory=dict)
@@ -83,6 +84,12 @@ class MetadataExtractor:
 
     def classify_chunk_type(self, text: str) -> ChunkType:
         """分类段落类型"""
+        # 表格行（由 DocxParser 添加前缀）
+        if text.startswith("[表格标题]"):
+            return "table_header"
+        if text.startswith("[表格]"):
+            return "table_row"
+
         # 法规引用
         for pattern in LEGAL_REF_PATTERNS:
             if pattern.search(text):

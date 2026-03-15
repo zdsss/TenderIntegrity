@@ -9,10 +9,15 @@ logger = logging.getLogger(__name__)
 
 
 def embed_and_store(state: TenderComparisonState) -> dict:
+    batch_size = (
+        settings.embedding_api_batch_size
+        if settings.embedding_use_api
+        else settings.embedding_batch_size
+    )
     embedding_service = EmbeddingService(
         model_name=settings.embedding_model,
         device=settings.embedding_device,
-        batch_size=settings.embedding_batch_size,
+        batch_size=batch_size,
         use_api=settings.embedding_use_api,
         api_key=settings.dashscope_api_key or None,
         api_base_url=settings.dashscope_base_url or None,

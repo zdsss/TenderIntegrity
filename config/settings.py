@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-m3"
     embedding_device: str = "cpu"
     embedding_batch_size: int = 32
+    embedding_api_batch_size: int = 10  # API 模式批次上限（百炼 text-embedding-v3 最大 10）
     embedding_use_api: bool = False   # True 时使用 API embedding，False 时使用本地模型
 
     # File storage
@@ -44,7 +45,7 @@ class Settings(BaseSettings):
 
     # Chunking
     chunk_max_chars: int = 800
-    chunk_min_chars: int = 50
+    chunk_min_chars: int = 20
     chunk_window_size: int = 600
     chunk_step_size: int = 300
 
@@ -54,8 +55,8 @@ class Settings(BaseSettings):
     low_risk_threshold: float = 45.0
 
     # Retrieval
-    top_k_similar: int = 5
-    vector_similarity_threshold: float = 0.70
+    top_k_similar: int = 10
+    vector_similarity_threshold: float = 0.55
     whitelist_similarity_threshold: float = 0.88
 
     @property
